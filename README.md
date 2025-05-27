@@ -1,7 +1,16 @@
-# Tauri + React + Typescript
+# Tauri Multiplayer Game
 
-This template should help get you started developing with Tauri, React and Typescript in Vite.
+## Getting Started
 
-## Recommended IDE Setup
+Check prerequisites:
 
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+- <https://v2.tauri.app/start/prerequisites/>
+- (Optional) <https://v2.tauri.app/start/prerequisites/#configure-for-mobile-targets>
+- <https://bun.sh/docs/installation>
+
+```bash
+git clone https://github.com/jamessizeland/tauri-multiplayer-game
+cd tauri-multiplayer-game
+bun install
+bun tauri dev
+```
