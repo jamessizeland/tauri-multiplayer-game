@@ -3,6 +3,8 @@ pub use iroh::NodeId;
 use iroh_gossip::net::GossipEvent;
 use serde::{Deserialize, Serialize};
 
+use crate::game::GameState;
+
 use super::message::{Message, SignedMessage};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -38,8 +40,12 @@ pub enum Event {
     Errorred {
         message: String,
     },
-    #[serde(rename_all = "camelCase")]
     Disconnected,
+    #[serde(rename_all = "camelCase")]
+    NewGameState {
+        state: GameState,
+    },
+    RequestSync,
 }
 
 impl TryFrom<iroh_gossip::net::Event> for Event {
@@ -65,6 +71,10 @@ impl TryFrom<iroh_gossip::net::Event> for Event {
                             nickname,
                             sent_timestamp: message.timestamp,
                         },
+                        Message::GameState { state } => {
+                            unimplemented!("{:?}", state);
+                        }
+                        Message::RequestSync => todo!(),
                     }
                 }
             },

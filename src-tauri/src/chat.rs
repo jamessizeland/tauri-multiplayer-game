@@ -5,21 +5,20 @@ pub mod peers;
 mod sender;
 mod ticket;
 
-use std::sync::{Arc, Mutex};
-
 use anyhow::Result;
+use channel::ChatReceiver;
 pub use event::Event;
 pub use iroh::NodeId;
 use iroh::{endpoint::RemoteInfo, protocol::Router, SecretKey};
 use iroh_gossip::net::{Gossip, GOSSIP_ALPN};
 use message::{Message, SignedMessage};
 use n0_future::{
-    boxed::BoxStream,
     task::{self, AbortOnDropHandle},
     time::Duration,
     StreamExt,
 };
 pub use sender::ChatSender;
+use std::sync::{Arc, Mutex};
 pub use ticket::ChatTicket;
 use tokio::sync::Notify;
 use tracing::{debug, info, warn};
@@ -82,7 +81,7 @@ impl ChatNode {
         &self,
         ticket: &ChatTicket,
         nickname: String,
-    ) -> Result<(ChatSender, BoxStream<Result<Event>>)> {
+    ) -> Result<(ChatSender, ChatReceiver)> {
         let topic_id = ticket.topic_id;
         let bootstrap = ticket.bootstrap.iter().cloned().collect();
         info!(?bootstrap, "joining {topic_id}");
@@ -92,7 +91,7 @@ impl ChatNode {
         let nickname = Arc::new(Mutex::new(nickname));
         let trigger_presence = Arc::new(Notify::new());
 
-        // We spawn a task that occasionally sens a Presence message with our nickname.
+        // We spawn a task that occasionally sends a Presence message with our nickname.
         // This allows to track which peers are online currently.
         let presence_task = AbortOnDropHandle::new(task::spawn({
             let secret_key = self.secret_key.clone();
