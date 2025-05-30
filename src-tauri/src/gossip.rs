@@ -1,15 +1,14 @@
 mod channel;
 mod doc;
-pub mod ephemeral;
+mod event;
+pub mod peers;
 
 use std::{path::PathBuf, sync::Arc};
 
 use anyhow::Result;
-pub use channel::GossipChannel;
 pub use doc::SharedActivity;
 use doc::{BlobsClient, DocsClient};
-use ephemeral::ticket::{ChatTicket, TicketOpts};
-pub use ephemeral::{event::Event, sender::ChatSender};
+pub use event::Event;
 pub use iroh::NodeId;
 use iroh::{endpoint::RemoteInfo, protocol::Router, SecretKey};
 use iroh_blobs::net_protocol::Blobs;

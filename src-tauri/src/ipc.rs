@@ -27,7 +27,7 @@ pub async fn create_room(
     tracing::info!("Created and joined room: {}", topic_id_str);
 
     // Generate ticket string from the Channel instance to be shared
-    let ticket_token = state.generate_ticket(TicketOpts::all()).await?;
+    let ticket_token = state.generate_ticket().await?;
 
     Ok(ticket_token)
 }
@@ -65,7 +65,6 @@ pub async fn join_room(
 pub async fn send_message(
     message: String,
     state: tauri::State<'_, AppContext>,
-    _app: tauri::AppHandle, // Marked as unused, can be removed if not needed by Tauri
 ) -> tauri::Result<()> {
     let sender = state.get_sender().await?;
     sender.send(message).await?;
@@ -110,8 +109,5 @@ pub async fn leave_room(
 #[tauri::command]
 /// Returns the node id of this node
 pub async fn get_node_id(state: tauri::State<'_, AppContext>) -> tauri::Result<NodeId> {
-    let node = state.node.lock().await;
-    node.as_ref()
-        .map(|chat_node| chat_node.node_id())
-        .ok_or(anyhow!("Node not initialized").into())
+    Ok(state.node.node_id())
 }

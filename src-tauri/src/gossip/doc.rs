@@ -1,16 +1,14 @@
 //! Any logic related to updating and synchronizing of the Document used for
 //! sharing state data between nodes.
 
-use crate::gossip::{ephemeral::ticket::ChatTicket, GossipNode};
+use crate::gossip::GossipNode;
 use anyhow::Context as _;
 use iroh_docs::{
     engine::LiveEvent,
     rpc::client::docs::{Doc, ShareMode},
-    store::Query,
-    AuthorId, DocTicket,
+    AuthorId, DocTicket, NamespaceId,
 };
 use n0_future::Stream;
-use tracing::info;
 
 use iroh_blobs::rpc::{client::blobs, proto as blobs_proto};
 use iroh_docs::rpc::{client::docs, proto as docs_proto};
@@ -58,7 +56,10 @@ impl SharedActivity {
     pub fn ticket(&self) -> String {
         self.ticket.to_string()
     }
-
+    /// Return the ID of this activity
+    pub fn id(&self) -> NamespaceId {
+        self.activity.id()
+    }
     /// Subscribe to updates from this activity.
     pub async fn activity_subscribe(
         &self,
@@ -74,36 +75,5 @@ impl SharedActivity {
             .set_bytes(self.author_id, key.as_ref().to_vec(), content)
             .await?;
         Ok(())
-    }
-    /// Write a new chat ticket or update it if we've added new peers.
-    pub fn update_chat_ticket(&self, ticket: ChatTicket) -> anyhow::Result<()> {
-        self.insert_bytes(PUBLIC_CHAT_KEY, serde_json::to_vec(&ticket)?.into());
-        Ok(())
-    }
-    /// We are storing a simple chat ticket inside this document for ephemeral chats
-    pub async fn get_chat_ticket(&self) -> anyhow::Result<ChatTicket> {
-        let query = self
-            .activity
-            .get_one(Query::single_latest_per_key().key_exact(PUBLIC_CHAT_KEY));
-        match query.await? {
-            None => {
-                // generate a new ticket and add it to the document.
-                let chat_ticket = ChatTicket::new_random();
-                self.update_chat_ticket(chat_ticket.clone())?;
-                Ok(chat_ticket)
-            }
-            Some(entry) => {
-                // read the existing chat key.
-                let id = String::from_utf8(entry.key().to_owned()).context("invalid key")?;
-                info!("chat ticket id: {id}");
-                let bytes = self
-                    .gossip
-                    .blobs
-                    .read_to_bytes(entry.content_hash())
-                    .await?;
-                let ticket: String = serde_json::from_slice(&bytes).context("invalid json")?;
-                Ok(ChatTicket::deserialize(&ticket)?)
-            }
-        }
     }
 }

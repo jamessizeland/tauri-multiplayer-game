@@ -1,12 +1,11 @@
 use std::collections::{HashMap, HashSet};
 
 use iroh::NodeId;
+use iroh_docs::engine::LiveEvent;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter as _};
 
 use crate::utils::get_timestamp;
-
-use super::Event;
 
 #[derive(Default)]
 pub struct PeerMap(HashMap<NodeId, PeerInfo>);
@@ -18,43 +17,14 @@ impl PeerMap {
     /// Update the activity of the peers list. Returns a list of updated peers if updated.
     pub fn update(
         &mut self,
-        event: Option<&Event>,
+        event: Option<&LiveEvent>,
         new_starters: &mut HashSet<NodeId>,
         app: &AppHandle,
     ) {
         let before = self.to_vec();
         let map = &mut self.0;
         match event {
-            Some(Event::Joined { neighbors }) => {
-                for &id in neighbors {
-                    new_starters.insert(id);
-                    map.entry(id)
-                        .and_modify(|peer| {
-                            peer.status = PeerStatus::Online;
-                            peer.last_seen = get_timestamp();
-                        })
-                        .or_insert(PeerInfo::new(id, None));
-                }
-            }
-            Some(Event::Presence {
-                from: id,
-                nickname,
-                sent_timestamp,
-            }) => {
-                if new_starters.remove(id) {
-                    if let Err(e) = app.emit("peers-new", nickname) {
-                        tracing::error!("Failed to emit event to frontend: {}", e);
-                    }
-                }
-                map.entry(*id)
-                    .and_modify(|peer| {
-                        peer.nickname = nickname.clone();
-                        peer.last_seen = *sent_timestamp;
-                        peer.status = PeerStatus::Online;
-                    })
-                    .or_insert(PeerInfo::new(*id, Some(nickname.clone())));
-            }
-            Some(Event::NeighborDown { node_id: id }) => {
+            Some(LiveEvent::NeighborDown(id)) => {
                 // node reported to have left the room.
                 map.entry(*id)
                     .and_modify(|peer| {
@@ -63,7 +33,7 @@ impl PeerMap {
                     })
                     .or_insert(PeerInfo::new(*id, None));
             }
-            Some(Event::NeighborUp { node_id: id }) => {
+            Some(LiveEvent::NeighborUp(id)) => {
                 // node reported to have rejoined the room
                 map.entry(*id)
                     .and_modify(|peer| {
