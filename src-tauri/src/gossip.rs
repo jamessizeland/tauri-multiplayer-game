@@ -1,29 +1,23 @@
 mod channel;
 mod doc;
-mod event;
-mod message;
-pub mod peers;
-mod sender;
-mod ticket;
-mod types;
+pub mod ephemeral;
 
 use std::{path::PathBuf, sync::Arc};
 
 use anyhow::Result;
 pub use channel::GossipChannel;
 pub use doc::SharedActivity;
-pub use event::Event;
+use doc::{BlobsClient, DocsClient};
+use ephemeral::ticket::{ChatTicket, TicketOpts};
+pub use ephemeral::{event::Event, sender::ChatSender};
 pub use iroh::NodeId;
 use iroh::{endpoint::RemoteInfo, protocol::Router, SecretKey};
 use iroh_blobs::net_protocol::Blobs;
 use iroh_docs::protocol::Docs;
 use iroh_gossip::net::Gossip;
-pub use sender::ChatSender;
-pub use ticket::{ChatTicket, TicketOpts};
 use tracing::{info, warn};
-pub use types::ChatReceiver;
-use types::{BlobsClient, DocsClient};
 
+#[derive(Clone)]
 pub struct GossipNode {
     secret_key: SecretKey,
     router: Router,

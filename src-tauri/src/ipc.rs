@@ -1,9 +1,8 @@
-use crate::{
-    gossip::{ChatTicket, NodeId, TicketOpts},
-    state::AppContext,
-    utils::AppStore,
-};
+use std::str::FromStr;
+
+use crate::{gossip::NodeId, state::AppContext, utils::AppStore};
 use anyhow::anyhow;
+use iroh_docs::DocTicket;
 
 #[tauri::command]
 /// Create a new room and return the information required to send
@@ -30,7 +29,6 @@ pub async fn create_room(
     // Generate ticket string from the Channel instance to be shared
     let ticket_token = state.generate_ticket(TicketOpts::all()).await?;
 
-    *state.latest_ticket.lock().await = Some(ticket_token.clone());
     Ok(ticket_token)
 }
 
@@ -45,6 +43,8 @@ pub async fn join_room(
     // Leave any existing room first
     leave_room(state.clone(), app.clone()).await?;
 
+    let ticket =
+        DocTicket::from_str(&ticket).map_err(|e| anyhow!("Invalid activity ticket: {}", e))?;
     // Store the active channel info
     state.start_channel(Some(ticket), &app, &nickname).await?;
 

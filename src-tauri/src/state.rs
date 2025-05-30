@@ -1,10 +1,13 @@
 use crate::gossip::{
-    peers::{PeerInfo, PeerMap},
-    ChatReceiver, ChatSender, ChatTicket, Event, GossipChannel, GossipNode, SharedActivity,
-    TicketOpts,
+    ephemeral::{
+        peers::{PeerInfo, PeerMap},
+        ChatReceiver,
+    },
+    ChatSender, Event, GossipChannel, GossipNode, SharedActivity,
 };
 use anyhow::anyhow;
 use iroh::NodeId;
+use iroh_docs::DocTicket;
 use n0_future::{task::AbortOnDropHandle, StreamExt as _};
 use std::{collections::HashSet, sync::Arc};
 use tauri::{AppHandle, Emitter as _};
@@ -16,15 +19,20 @@ use tokio::{
 
 /// Holds information about the currently active chat channel.
 pub struct ActiveChannel {
-    // activity: SharedActivity,
-    inner: GossipChannel,
+    activity: SharedActivity,
+    chat: GossipChannel,
     receiver_handle: AbortOnDropHandle<()>,
 }
 
 impl ActiveChannel {
-    pub fn new(inner: GossipChannel, receiver_handle: AbortOnDropHandle<()>) -> Self {
+    pub fn new(
+        chat: GossipChannel,
+        doc: SharedActivity,
+        receiver_handle: AbortOnDropHandle<()>,
+    ) -> Self {
         Self {
-            inner,
+            chat,
+            activity: doc,
             receiver_handle,
         }
     }
@@ -59,21 +67,21 @@ impl AppContext {
     /// Get the active channel's topic ID.
     pub async fn get_topic_id(&self) -> anyhow::Result<String> {
         match self.active_channel.lock().await.as_ref() {
-            Some(channel) => Ok(channel.inner.id()),
+            Some(channel) => Ok(channel.chat.id()),
             None => Err(anyhow!("Could not get Topic ID. No active channel.")),
         }
     }
     /// Generate a new ticket token string.
-    pub async fn generate_ticket(&self, options: TicketOpts) -> anyhow::Result<String> {
+    pub async fn generate_ticket(&self) -> anyhow::Result<String> {
         match self.active_channel.lock().await.as_ref() {
-            Some(channel) => channel.inner.ticket(options),
+            Some(channel) => channel.chat.ticket(options),
             None => Err(anyhow!("Could not generate ticket. No active channel.")),
         }
     }
     /// Send a message on the active channel. Returns active topic ID.
     pub async fn get_sender(&self) -> anyhow::Result<ChatSender> {
         match self.active_channel.lock().await.as_ref() {
-            Some(channel) => Ok(channel.inner.sender()),
+            Some(channel) => Ok(channel.chat.sender()),
             None => Err(anyhow!("Could not get sender. No active channel.")),
         }
     }
@@ -82,14 +90,17 @@ impl AppContext {
         match self.active_channel.lock().await.take() {
             Some(channel) => {
                 channel.receiver_handle.abort();
-                Ok(Some(channel.inner.id()))
+                Ok(Some(channel.chat.id()))
             }
             None => Ok(None),
         }
     }
+    /// Start both the Docs channel and the Ephemeral Chat channel.
+    /// The chat channel's ticket is held inside the doc, so should be collected
+    /// from there, or generated if it doesn't exist.
     pub async fn start_channel(
         &self,
-        ticket: Option<String>,
+        doc_ticket: Option<DocTicket>,
         app_handle: &AppHandle,
         nickname: &str,
     ) -> anyhow::Result<String> {
@@ -97,13 +108,9 @@ impl AppContext {
         let Some(node) = node_guard.as_ref() else {
             return Err(anyhow!("Node not initialized").into());
         };
-        let chat_ticket = match ticket {
-            Some(ticket) => {
-                tracing::info!("deserializing ticket token: {}", ticket);
-                ChatTicket::deserialize(&ticket)?
-            }
-            None => ChatTicket::new_random(),
-        };
+        let activity = SharedActivity::new(doc_ticket, node.clone()).await?;
+        let chat_ticket = activity.get_chat_ticket().await?;
+
         // Use generate_channel from [chat::channel]
         let mut channel = node
             .generate_channel(chat_ticket, nickname)
@@ -115,9 +122,9 @@ impl AppContext {
             .ok_or_else(|| anyhow!("Receiver already taken from channel object"))?;
         // Spawn the event listener task
         let receiver_handle = self.spawn_event_listener(app_handle.clone(), rx);
-        let active_channel = ActiveChannel::new(channel, receiver_handle);
+        let active_channel = ActiveChannel::new(channel, activity, receiver_handle);
         active_channel
-            .inner
+            .chat
             .sender()
             .set_nickname(nickname.to_string());
         // Store the active channel info
@@ -218,7 +225,7 @@ async fn update_ticket(
         Event::Joined { .. } | Event::NeighborUp { .. } => {
             tracing::debug!("Peer event detected, attempting to update latest ticket.");
             if let Some(active_channel_guard) = active_channel_clone.lock().await.as_ref() {
-                match active_channel_guard.inner.ticket(TicketOpts::all()) {
+                match active_channel_guard.chat.ticket(TicketOpts::all()) {
                     Ok(new_ticket_str) => {
                         *latest_ticket_clone.lock().await = Some(new_ticket_str.clone());
                         tracing::info!(

@@ -5,8 +5,12 @@ use std::{
 };
 
 use crate::gossip::{
-    message::{Message, SignedMessage},
-    ChatReceiver, ChatSender, ChatTicket, Event, GossipNode, TicketOpts,
+    ephemeral::{
+        message::{Message, SignedMessage},
+        sender::ChatSender,
+        ChatReceiver,
+    },
+    ChatTicket, Event, GossipNode, TicketOpts,
 };
 pub use iroh::NodeId;
 pub use iroh_gossip::proto::TopicId;
