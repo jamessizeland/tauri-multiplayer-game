@@ -4,7 +4,7 @@ use iroh::{PublicKey, SecretKey};
 use iroh_base::Signature;
 use serde::{Deserialize, Serialize};
 
-use crate::{game::GameState, utils::get_timestamp};
+use crate::utils::get_timestamp;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SignedMessage {
@@ -50,14 +50,8 @@ pub enum WireMessage {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Message {
-    /// Ping other connected users to tell them we're still here.
     Presence { nickname: String },
-    /// Send a new text message to connected users.
     Message { text: String, nickname: String },
-    /// Send the latest game state as far as we know it.
-    GameState { state: GameState },
-    /// Request catch up information from connected users.
-    RequestSync,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
