@@ -2,8 +2,8 @@ use anyhow::anyhow;
 use tauri::Manager as _;
 use utils::AppStore;
 
-mod chat;
 mod game;
+mod gossip;
 mod ipc;
 mod state;
 mod utils;
@@ -20,7 +20,7 @@ async fn init_context(app: tauri::AppHandle) -> tauri::Result<()> {
 
     // Spawn the Iroh node
     let key = AppStore::acquire(&app)?.get_secret_key()?;
-    let node = chat::ChatNode::spawn(Some(key))
+    let node = gossip::ChatNode::spawn(Some(key))
         .await
         .map_err(|e| anyhow!("Failed to spawn node: {}", e))?;
 

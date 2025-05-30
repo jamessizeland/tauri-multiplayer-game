@@ -1,6 +1,5 @@
-use crate::chat::{
-    self,
-    channel::{Channel, TicketOpts},
+use crate::gossip::{
+    channel::{Channel as GossipChannel, TicketOpts},
     peers::{PeerInfo, PeerMap},
     ChatNode, ChatSender, Event,
 };
@@ -17,12 +16,12 @@ use tokio::{
 
 /// Holds information about the currently active chat channel.
 pub struct ActiveChannel {
-    inner: chat::channel::Channel,
+    inner: GossipChannel,
     receiver_handle: AbortOnDropHandle<()>,
 }
 
 impl ActiveChannel {
-    pub fn new(inner: chat::channel::Channel, receiver_handle: AbortOnDropHandle<()>) -> Self {
+    pub fn new(inner: GossipChannel, receiver_handle: AbortOnDropHandle<()>) -> Self {
         Self {
             inner,
             receiver_handle,
@@ -89,7 +88,7 @@ impl AppContext {
     }
     pub async fn start_channel(
         &self,
-        domain_channel: Channel,
+        domain_channel: GossipChannel,
         app_handle: &AppHandle,
         receiver: n0_future::stream::Boxed<anyhow::Result<Event>>,
         nickname: &str,
