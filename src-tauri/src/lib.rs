@@ -20,7 +20,7 @@ async fn init_context(app: tauri::AppHandle) -> tauri::Result<()> {
 
     // Spawn the Iroh node
     let key = AppStore::acquire(&app)?.get_secret_key()?;
-    let node = gossip::ChatNode::spawn(Some(key))
+    let node = gossip::GossipNode::spawn(Some(key))
         .await
         .map_err(|e| anyhow!("Failed to spawn node: {}", e))?;
 

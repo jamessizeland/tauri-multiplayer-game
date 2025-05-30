@@ -1,5 +1,5 @@
 use crate::{
-    gossip::{channel::TicketOpts, ChatTicket, NodeId},
+    gossip::{GossipTicket, NodeId, TicketOpts},
     state::AppContext,
     utils::AppStore,
 };
@@ -24,7 +24,7 @@ pub async fn create_room(
     let store = AppStore::acquire(&app)?;
     // Create a new random ticket to initialize the channel.
     // generate_channel will ensure this node is part of the bootstrap.
-    let initial_ticket = ChatTicket::new_random();
+    let initial_ticket = GossipTicket::new_random();
 
     // Use generate_channel from [chat::channel]
     let mut channel = node
@@ -70,7 +70,7 @@ pub async fn join_room(
     leave_room(state.clone(), app.clone()).await?;
 
     tracing::info!("deserializing ticket token: {}", ticket);
-    let chat_ticket = ChatTicket::deserialize(&ticket)?;
+    let chat_ticket = GossipTicket::deserialize(&ticket)?;
     *state.latest_ticket.lock().await = Some(ticket.clone());
 
     // Use generate_channel from chat::channel

@@ -1,4 +1,4 @@
-pub mod channel;
+mod channel;
 mod event;
 mod message;
 pub mod peers;
@@ -6,7 +6,7 @@ mod sender;
 mod ticket;
 
 use anyhow::Result;
-use channel::ChatReceiver;
+pub use channel::{ChatReceiver, GossipChannel};
 pub use event::Event;
 pub use iroh::NodeId;
 use iroh::{endpoint::RemoteInfo, protocol::Router, SecretKey};
@@ -19,19 +19,19 @@ use n0_future::{
 };
 pub use sender::ChatSender;
 use std::sync::{Arc, Mutex};
-pub use ticket::ChatTicket;
+pub use ticket::{GossipTicket, TicketOpts};
 use tokio::sync::Notify;
 use tracing::{debug, info, warn};
 
 pub const PRESENCE_INTERVAL: Duration = Duration::from_secs(5);
 
-pub struct ChatNode {
+pub struct GossipNode {
     secret_key: SecretKey,
     router: Router,
     gossip: Gossip,
 }
 
-impl ChatNode {
+impl GossipNode {
     /// Spawns a gossip node.
     pub async fn spawn(secret_key: Option<SecretKey>) -> Result<Self> {
         let secret_key = secret_key.unwrap_or_else(|| SecretKey::generate(rand::rngs::OsRng));
@@ -79,7 +79,7 @@ impl ChatNode {
     /// and a stream of [`Event`] items for incoming messages and other event.s
     pub fn join(
         &self,
-        ticket: &ChatTicket,
+        ticket: &GossipTicket,
         nickname: String,
     ) -> Result<(ChatSender, ChatReceiver)> {
         let topic_id = ticket.topic_id;

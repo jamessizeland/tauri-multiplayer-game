@@ -1,7 +1,6 @@
 use crate::gossip::{
-    channel::{Channel as GossipChannel, TicketOpts},
     peers::{PeerInfo, PeerMap},
-    ChatNode, ChatSender, Event,
+    ChatSender, Event, GossipChannel, GossipNode, TicketOpts,
 };
 use anyhow::anyhow;
 use iroh::NodeId;
@@ -33,7 +32,7 @@ impl ActiveChannel {
 /// game document handle, current game state, and background task handles.
 pub struct AppContext {
     // The iroh client instance used for all interactions. Option<> because it's initialized async.
-    pub node: Arc<TokioMutex<Option<ChatNode>>>,
+    pub node: Arc<TokioMutex<Option<GossipNode>>>,
     active_channel: Arc<TokioMutex<Option<ActiveChannel>>>,
     pub latest_ticket: Arc<TokioMutex<Option<String>>>,
     peers: Arc<TokioMutex<PeerMap>>,
