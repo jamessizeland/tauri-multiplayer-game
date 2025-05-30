@@ -17,10 +17,15 @@ async fn init_context(app: tauri::AppHandle) -> tauri::Result<()> {
         return Ok(());
     }
     *state.latest_ticket.lock().await = None;
+    let data_root = app
+        .path()
+        .app_data_dir()
+        .map_err(|_| anyhow!("can't get application data directory"))?
+        .join("iroh_data");
 
     // Spawn the Iroh node
     let key = AppStore::acquire(&app)?.get_secret_key()?;
-    let node = gossip::GossipNode::spawn(Some(key))
+    let node = gossip::GossipNode::spawn(Some(key), data_root)
         .await
         .map_err(|e| anyhow!("Failed to spawn node: {}", e))?;
 

@@ -1,6 +1,7 @@
 use crate::gossip::{
     peers::{PeerInfo, PeerMap},
-    ChatSender, Event, GossipChannel, GossipNode, TicketOpts,
+    ChatReceiver, ChatSender, ChatTicket, Event, GossipChannel, GossipNode, SharedActivity,
+    TicketOpts,
 };
 use anyhow::anyhow;
 use iroh::NodeId;
@@ -15,6 +16,7 @@ use tokio::{
 
 /// Holds information about the currently active chat channel.
 pub struct ActiveChannel {
+    // activity: SharedActivity,
     inner: GossipChannel,
     receiver_handle: AbortOnDropHandle<()>,
 }
@@ -87,14 +89,33 @@ impl AppContext {
     }
     pub async fn start_channel(
         &self,
-        domain_channel: GossipChannel,
+        ticket: Option<String>,
         app_handle: &AppHandle,
-        receiver: n0_future::stream::Boxed<anyhow::Result<Event>>,
         nickname: &str,
     ) -> anyhow::Result<String> {
+        let node_guard = self.node.lock().await;
+        let Some(node) = node_guard.as_ref() else {
+            return Err(anyhow!("Node not initialized").into());
+        };
+        let chat_ticket = match ticket {
+            Some(ticket) => {
+                tracing::info!("deserializing ticket token: {}", ticket);
+                ChatTicket::deserialize(&ticket)?
+            }
+            None => ChatTicket::new_random(),
+        };
+        // Use generate_channel from [chat::channel]
+        let mut channel = node
+            .generate_channel(chat_ticket, nickname)
+            .map_err(|e| anyhow!("Failed to generate channel: {}", e))?;
+
+        // Take the receiver from the Channel object to give to spawn_event_listener
+        let rx = channel
+            .take_receiver()
+            .ok_or_else(|| anyhow!("Receiver already taken from channel object"))?;
         // Spawn the event listener task
-        let receiver_handle = self.spawn_event_listener(app_handle.clone(), receiver);
-        let active_channel = ActiveChannel::new(domain_channel, receiver_handle);
+        let receiver_handle = self.spawn_event_listener(app_handle.clone(), rx);
+        let active_channel = ActiveChannel::new(channel, receiver_handle);
         active_channel
             .inner
             .sender()
@@ -109,11 +130,12 @@ impl AppContext {
         );
         Ok(topic_id_str)
     }
+
     /// Spawns a background task to listen for chat events and emit them to the frontend.
     fn spawn_event_listener(
         &self,
         app: tauri::AppHandle,
-        mut receiver: n0_future::stream::Boxed<anyhow::Result<Event>>,
+        mut receiver: ChatReceiver,
     ) -> AbortOnDropHandle<()> {
         let mut tick_interval = interval(Duration::from_secs(2));
         let peers = self.peers.clone();

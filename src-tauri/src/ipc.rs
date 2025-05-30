@@ -1,5 +1,5 @@
 use crate::{
-    gossip::{GossipTicket, NodeId, TicketOpts},
+    gossip::{ChatTicket, NodeId, TicketOpts},
     state::AppContext,
     utils::AppStore,
 };
@@ -13,33 +13,14 @@ pub async fn create_room(
     state: tauri::State<'_, AppContext>,
     app: tauri::AppHandle,
 ) -> tauri::Result<String> {
-    let node_guard = state.node.lock().await;
-    let Some(node) = node_guard.as_ref() else {
-        return Err(anyhow!("Node not initialized").into());
-    };
-
     // Leave any existing room first
     leave_room(state.clone(), app.clone()).await?;
 
     let store = AppStore::acquire(&app)?;
-    // Create a new random ticket to initialize the channel.
-    // generate_channel will ensure this node is part of the bootstrap.
-    let initial_ticket = GossipTicket::new_random();
-
-    // Use generate_channel from [chat::channel]
-    let mut channel = node
-        .generate_channel(initial_ticket, nickname.clone())
-        .map_err(|e| anyhow!("Failed to generate channel: {}", e))?;
-
-    // Take the receiver from the Channel object to give to spawn_event_listener
-    let rx = channel
-        .take_receiver()
-        .ok_or_else(|| anyhow!("Receiver already taken from channel object"))?;
-
     store.set_nickname(&nickname)?;
 
     // Store the active channel info
-    state.start_channel(channel, &app, rx, &nickname).await?;
+    state.start_channel(None, &app, &nickname).await?;
 
     // Get the topic_id from the established channel for logging
     let topic_id_str = state.get_topic_id().await?;
@@ -61,30 +42,11 @@ pub async fn join_room(
     state: tauri::State<'_, AppContext>,
     app: tauri::AppHandle,
 ) -> tauri::Result<()> {
-    let node_guard = state.node.lock().await;
-    let Some(node) = node_guard.as_ref() else {
-        return Err(anyhow!("Node not initialized").into());
-    };
-
     // Leave any existing room first
     leave_room(state.clone(), app.clone()).await?;
 
-    tracing::info!("deserializing ticket token: {}", ticket);
-    let chat_ticket = GossipTicket::deserialize(&ticket)?;
-    *state.latest_ticket.lock().await = Some(ticket.clone());
-
-    // Use generate_channel from chat::channel
-    let mut channel = node
-        .generate_channel(chat_ticket.clone(), nickname.clone())
-        .map_err(|e| anyhow!("Failed to generate channel: {}", e))?;
-
-    // Take the receiver from the Channel object
-    let rx = channel
-        .take_receiver()
-        .ok_or_else(|| anyhow!("Receiver already taken from channel object"))?;
-
     // Store the active channel info
-    state.start_channel(channel, &app, rx, &nickname).await?;
+    state.start_channel(Some(ticket), &app, &nickname).await?;
 
     // Get the topic_id from the established channel for logging
     let topic_id_str = state.get_topic_id().await?;

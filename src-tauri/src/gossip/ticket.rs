@@ -7,12 +7,12 @@ pub use iroh_gossip::proto::TopicId;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct GossipTicket {
+pub struct ChatTicket {
     pub topic_id: TopicId,
     pub bootstrap: BTreeSet<NodeId>,
 }
 
-impl GossipTicket {
+impl ChatTicket {
     pub fn new_random() -> Self {
         let topic_id = TopicId::from_bytes(rand::random());
         Self::new(topic_id)
@@ -32,7 +32,7 @@ impl GossipTicket {
     }
 }
 
-impl Ticket for GossipTicket {
+impl Ticket for ChatTicket {
     const KIND: &'static str = "chat";
 
     fn to_bytes(&self) -> Vec<u8> {
