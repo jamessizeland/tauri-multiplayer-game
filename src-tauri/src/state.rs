@@ -1,5 +1,9 @@
 use crate::gossip::{
-    doc::{chat::ChatMessage, peers::PeerStatus, SharedActivity},
+    doc::{
+        chat::ChatMessage,
+        peers::{PeerInfo, PeerStatus},
+        SharedActivity,
+    },
     spawn_event_listener, GossipNode,
 };
 use anyhow::anyhow;
@@ -49,11 +53,11 @@ impl AppContext {
         }
     }
     /// Return a list of the known members of this Gossip Swarm.
-    #[allow(unused)]
-    pub async fn get_peers(&self) -> Vec<String> {
-        // let peers = self.peers.lock().await;
-        // peers.to_vec()
-        todo!()
+    pub async fn get_peers(&self) -> anyhow::Result<Vec<PeerInfo>> {
+        match self.active_channel.lock().await.as_ref() {
+            Some(channel) => channel.activity.get_all_peer_info().await,
+            None => Err(anyhow!("Could not get peers. No active channel.")),
+        }
     }
     /// Send a message on the active channel.
     pub async fn send_message(&self, message: &str) -> anyhow::Result<()> {
@@ -79,7 +83,7 @@ impl AppContext {
     /// Generate a new ticket token string.
     pub async fn generate_ticket(&self) -> anyhow::Result<String> {
         match self.active_channel.lock().await.as_ref() {
-            Some(channel) => Ok(channel.activity.ticket()),
+            Some(channel) => Ok(channel.activity.ticket().await?),
             None => Err(anyhow!("Could not generate ticket. No active channel.")),
         }
     }
@@ -87,8 +91,11 @@ impl AppContext {
     pub async fn drop_channel(&self) -> anyhow::Result<Option<String>> {
         match self.active_channel.lock().await.take() {
             Some(channel) => {
+                channel.activity.set_status(PeerStatus::Offline).await?;
+                let id = channel.activity.id().to_string();
+                channel.activity.close().await?;
                 channel.receiver_handle.abort();
-                Ok(Some(channel.activity.id().to_string()))
+                Ok(Some(id))
             }
             None => Ok(None),
         }
@@ -107,13 +114,9 @@ impl AppContext {
             app_handle.clone(),
             Box::pin(activity.activity_subscribe().await?),
             self.active_channel.clone(),
-            self.latest_ticket.clone(),
         );
         let active_channel = ActiveChannel::new(activity, receiver_handle, nickname);
-        active_channel
-            .activity
-            .set_peer_info(nickname, PeerStatus::Online { ready: false })
-            .await?;
+        active_channel.activity.set_nickname(nickname).await?;
 
         let topic_id = active_channel.activity.id().to_string();
         // Store the active channel info

@@ -3,17 +3,14 @@ use crate::{
     utils::get_timestamp,
 };
 use iroh::NodeId;
-use iroh_docs::{
-    store::{Query, SortBy, SortDirection},
-    AuthorId,
-};
+use iroh_docs::{store::Query, AuthorId};
 use n0_future::StreamExt as _;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct ChatMessage {
     /// NodeId of the peer who sent the message
-    pub sender_node_id: NodeId,
+    pub sender: NodeId,
     /// Nickname of the sender at the time of sending
     pub nickname: String,
     /// Message payload
@@ -38,7 +35,7 @@ impl SharedActivity {
         let key = message_key(timestamp, &self.author_id);
         let chat_message = ChatMessage {
             timestamp,
-            sender_node_id: self.gossip.node_id(),
+            sender: self.gossip.node_id(),
             nickname: name.to_string(),
             content: message_content.to_string(),
         };

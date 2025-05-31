@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { notifyError } from "./notifications";
+import { ChatMessage } from "types";
 
 /** Create a new room and return the information required to send
  an out-of-band Join Code to others to connect. */
@@ -85,9 +86,9 @@ export async function getNodeId(): Promise<string> {
 }
 
 /** Return the list of messages sent be activity participants. */
-export async function getMessageLog(): Promise<string[]> {
+export async function getMessageLog(): Promise<ChatMessage[]> {
   try {
-    return await invoke<string[]>("get_message_log");
+    return await invoke<ChatMessage[]>("get_message_log");
   } catch (e) {
     notifyError(`Failed to get message log: ${e}`, "MessageLogGetError");
     return [];

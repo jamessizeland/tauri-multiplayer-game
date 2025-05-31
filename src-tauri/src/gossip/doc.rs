@@ -4,6 +4,8 @@
 pub mod chat;
 pub mod peers;
 
+use std::ops::Deref;
+
 use crate::gossip::GossipNode;
 use bytes::Bytes;
 use iroh_blobs::rpc::{client::blobs, proto as blobs_proto};
@@ -41,8 +43,16 @@ pub const GAME_STATE_KEY: &[u8] = b"game_state";
 pub struct SharedActivity {
     gossip: GossipNode,
     activity: Doc<DocsRPCConnector>,
+    #[allow(unused)]
     ticket: DocTicket,
     author_id: AuthorId,
+}
+
+impl Deref for SharedActivity {
+    type Target = Doc<DocsRPCConnector>;
+    fn deref(&self) -> &Self::Target {
+        &self.activity
+    }
 }
 
 impl SharedActivity {
@@ -54,6 +64,7 @@ impl SharedActivity {
             Some(ticket) => gossip.docs.import(ticket).await?,
         };
         let ticket = activity.share(ShareMode::Write, Default::default()).await?;
+
         Ok(Self {
             gossip,
             activity,
@@ -62,8 +73,12 @@ impl SharedActivity {
         })
     }
     /// Get the stringified ticket information to share with others.
-    pub fn ticket(&self) -> String {
-        self.ticket.to_string()
+    pub async fn ticket(&self) -> anyhow::Result<String> {
+        let ticket = self
+            .activity
+            .share(ShareMode::Write, Default::default())
+            .await?;
+        Ok(ticket.to_string())
     }
     /// Return the ID of this activity
     pub fn id(&self) -> NamespaceId {
@@ -92,7 +107,7 @@ impl SharedActivity {
         self.activity.get_one(query).await
     }
     /// Helper function to get the content bytes associated with an entry
-    pub(self) async fn read_bytes(&self, entry: Entry) -> anyhow::Result<Bytes> {
+    pub async fn read_bytes(&self, entry: Entry) -> anyhow::Result<Bytes> {
         self.gossip.blobs.read_to_bytes(entry.content_hash()).await
     }
 }

@@ -1,20 +1,21 @@
 import React, { useState, useEffect, useRef } from "react";
 import { MdSend } from "react-icons/md";
 import { sendMessage, getNodeId, getNickname } from "services/ipc";
-import { MessageReceivedEvent } from "types/events";
+import { notifyError } from "services/notifications";
+import { ChatMessage } from "types";
 
 // This interface will represent any message shown in the UI,
 // whether it's locally sent or received from props.
 interface DisplayMessage {
   from: string; // NodeId of the sender
-  text: string; // Message content
+  content: string; // Message content
   nickname: string; // Nickname of the sender
-  sentTimestamp: number; // Timestamp of when the message was sent/created
+  timestamp: number; // Timestamp of when the message was sent/created
   isMine: boolean; // True if this message was sent by the current user
   displayId: string; // A unique ID for React's key prop
 }
 
-const Messages: React.FC<{ messages: MessageReceivedEvent[] }> = ({
+const Messages: React.FC<{ messages: ChatMessage[] }> = ({
   // `messages` prop contains messages from others
   messages: propMessages,
 }) => {
@@ -23,10 +24,6 @@ const Messages: React.FC<{ messages: MessageReceivedEvent[] }> = ({
   const [myNodeId, setMyNodeId] = useState<string | null>(null);
   const [myNickname, setMyNickname] = useState<string | null>(null);
 
-  // Stores messages sent by the current user locally
-  const [localSentMessages, setLocalSentMessages] = useState<DisplayMessage[]>(
-    []
-  );
   // Stores all messages (local and from props) sorted for display
   const [displayedMessages, setDisplayedMessages] = useState<DisplayMessage[]>(
     []
@@ -50,48 +47,32 @@ const Messages: React.FC<{ messages: MessageReceivedEvent[] }> = ({
 
   // Combine and sort messages whenever propMessages or localSentMessages change
   useEffect(() => {
-    const remoteDisplayMessages: DisplayMessage[] = propMessages.map((msg) => ({
-      ...msg, // from, text, nickname, sentTimestamp
-      isMine: false, // Messages from props are from others
-      displayId: `remote-${msg.from}-${msg.sentTimestamp}-${msg.text.slice(
-        0,
-        5
-      )}`, // Create a somewhat unique ID
-    }));
+    const displayMessages: DisplayMessage[] = propMessages.map(
+      ({ content, nickname, sender, timestamp }) => ({
+        content,
+        nickname,
+        timestamp,
+        from: sender,
+        isMine: sender === myNodeId,
+        displayId: `msg-${sender}-${timestamp}-${content.slice(0, 5)}`, // Create a somewhat unique ID
+      })
+    );
 
-    const allMessages = [...localSentMessages, ...remoteDisplayMessages];
-    allMessages.sort((a, b) => a.sentTimestamp - b.sentTimestamp);
-    setDisplayedMessages(allMessages);
-  }, [propMessages, localSentMessages]);
+    displayMessages.sort((a, b) => a.timestamp - b.timestamp);
+    setDisplayedMessages(displayMessages);
+  }, [propMessages]);
 
   const handleSendMessage = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (inputValue.trim() && myNodeId && myNickname) {
+    const messageToSend = inputValue.trim();
+    if (messageToSend && myNodeId && myNickname) {
       setSubmitting(true);
-
-      const messageToSend = inputValue.trim();
-      const newLocalMessage: DisplayMessage = {
-        from: myNodeId,
-        text: messageToSend,
-        nickname: myNickname,
-        sentTimestamp: Date.now() * 1000,
-        isMine: true,
-        displayId: `local-${Date.now()}`, // Unique ID for local message
-      };
-
-      setLocalSentMessages((prev) => [...prev, newLocalMessage]);
       setInputValue(""); // Clear input
 
       try {
         await sendMessage(messageToSend);
-        // Message is already displayed locally. No further action on success needed here.
       } catch (error) {
-        console.error("Failed to send message via IPC:", error);
-        // Optionally, provide UI feedback for send failure, e.g., remove the message or mark it as failed
-        setLocalSentMessages((prev) =>
-          prev.filter((msg) => msg.displayId !== newLocalMessage.displayId)
-        );
-        // alert("Failed to send message. Please try again.");
+        notifyError(`Failed to send message ${error}:`);
       } finally {
         setSubmitting(false);
       }
@@ -158,10 +139,10 @@ const MessageArea: React.FC<{
                 </span>
               )}
               <time className="text-xs opacity-50">
-                {new Date(message.sentTimestamp / 1000).toLocaleString()}
+                {new Date(message.timestamp / 1000).toLocaleString()}
               </time>
             </div>
-            <div className="chat-bubble">{message.text}</div>
+            <div className="chat-bubble">{message.content}</div>
             {/* Optional: Footer for sent/delivered status for "isMine" messages */}
           </div>
         );

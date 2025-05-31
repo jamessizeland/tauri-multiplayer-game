@@ -1,9 +1,12 @@
 use std::str::FromStr;
 
-use crate::{gossip::NodeId, state::AppContext, utils::AppStore};
+use crate::{
+    gossip::{doc::chat::ChatMessage, NodeId},
+    state::AppContext,
+    utils::AppStore,
+};
 use anyhow::anyhow;
 use iroh_docs::DocTicket;
-use tracing::info;
 
 #[tauri::command]
 /// Create a new room and return the information required to send
@@ -114,8 +117,10 @@ pub async fn get_node_id(state: tauri::State<'_, AppContext>) -> tauri::Result<N
 
 #[tauri::command]
 /// Read Message Log
-pub async fn get_message_log(state: tauri::State<'_, AppContext>) -> tauri::Result<Vec<String>> {
+pub async fn get_message_log(
+    state: tauri::State<'_, AppContext>,
+) -> tauri::Result<Vec<ChatMessage>> {
     let msgs = state.get_message_log().await?;
-    info!("message log: {:?}", msgs);
-    Ok(Vec::new())
+    tracing::info!("message log: {:?}", msgs);
+    Ok(msgs)
 }

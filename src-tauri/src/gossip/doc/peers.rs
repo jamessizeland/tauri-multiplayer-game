@@ -1,4 +1,5 @@
 use crate::gossip::doc::{SharedActivity, NICKNAME_KEY_SUFFIX, PEERS_PREFIX};
+use anyhow::anyhow;
 use iroh_docs::store::Query;
 use n0_future::StreamExt as _;
 use serde::{Deserialize, Serialize};
@@ -11,7 +12,7 @@ fn peer_nickname_key(node_id: &iroh::NodeId) -> Vec<u8> {
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum PeerStatus {
-    Online { ready: bool },
+    Online,
     Offline,
     Unknown,
 }
@@ -21,22 +22,42 @@ pub struct PeerInfo {
     pub node_id: iroh::NodeId,
     pub nickname: String,
     pub status: PeerStatus,
+    pub ready: bool,
 }
 
 impl SharedActivity {
-    /// Set the nickname and status for the current node.
-    pub async fn set_peer_info(&self, nickname: &str, status: PeerStatus) -> anyhow::Result<()> {
+    /// Set our nickname.
+    pub async fn set_nickname(&self, nickname: &str) -> anyhow::Result<()> {
         info!("Setting nickname to {}", nickname);
-        let key = peer_nickname_key(&self.gossip.node_id());
-        let peer_info = PeerInfo {
-            node_id: self.gossip.node_id(),
-            nickname: nickname.to_string(),
-            status,
+        let node_id = self.gossip.node_id();
+        let key = peer_nickname_key(&node_id);
+        let peer_info = match self.get_peer_info(&node_id).await? {
+            None => PeerInfo {
+                node_id: self.gossip.node_id(),
+                nickname: nickname.to_string(),
+                status: PeerStatus::Online,
+                ready: false,
+            },
+            Some(mut peer) => {
+                peer.nickname = nickname.to_string();
+                peer
+            }
         };
         self.write(key, postcard::to_stdvec(&peer_info)?).await?;
         Ok(())
     }
-
+    /// Set our status
+    pub async fn set_status(&self, status: PeerStatus) -> anyhow::Result<()> {
+        info!("Setting status to {:?}", status);
+        let node_id = self.gossip.node_id();
+        let key = peer_nickname_key(&node_id);
+        let Some(mut peer) = self.get_peer_info(&node_id).await? else {
+            return Err(anyhow!("Peer not found"));
+        };
+        peer.status = status;
+        self.write(key, postcard::to_stdvec(&peer)?).await?;
+        Ok(())
+    }
     /// Get the peer info for a given node_id.
     pub async fn get_peer_info(&self, node_id: &iroh::NodeId) -> anyhow::Result<Option<PeerInfo>> {
         let key = peer_nickname_key(node_id);

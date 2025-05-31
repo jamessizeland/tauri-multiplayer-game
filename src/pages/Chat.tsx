@@ -1,41 +1,35 @@
 import { useEffect, useState } from "react";
-import { ChatEvent, MessageReceivedEvent } from "types/events";
+import { ChatEvent } from "types/events";
 import { listen } from "@tauri-apps/api/event";
 import TopBar from "components/elements/topbar";
 import EventLogModal from "components/elements/eventLog";
 import Messages from "components/elements/messages";
-import { notify } from "services/notifications";
-import { PeerInfo } from "types";
-import { getMessageLog } from "services/ipc";
+import { ChatMessage, PeerInfo } from "types";
 
 export function ChatPage() {
-  const [messages, setMessages] = useState<MessageReceivedEvent[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [eventLog, setEventLog] = useState<ChatEvent[]>([]);
   const [neighbours, setNeighbours] = useState<PeerInfo[]>([]);
   const [openLog, setOpenLog] = useState<boolean>(false);
 
   useEffect(() => {
-    const updatePeersRef = listen<PeerInfo[]>("peers-event", async (event) => {
+    const updatePeersRef = listen<PeerInfo[]>("peer-update", async (event) => {
       console.log(event.payload);
       setNeighbours(event.payload);
     });
-    const welcomePeersRef = listen<String>("peers-new", async (event) => {
-      notify(`${event.payload} joined the room`);
+    const messagesRef = listen<ChatMessage>("new-message", async (event) => {
+      console.log(event.payload);
+      setMessages((messages) => [...messages, event.payload]);
     });
 
     const eventsRef = listen<ChatEvent>("chat-event", async (event) => {
       console.log(event);
       setEventLog((eventLog) => [...eventLog, event.payload]);
-      await getMessageLog();
-      if (event.payload.type === "messageReceived") {
-        const message = event.payload;
-        setMessages((messages) => [...messages, message]);
-      }
     });
     return () => {
       updatePeersRef.then((drop) => drop());
       eventsRef.then((drop) => drop());
-      welcomePeersRef.then((drop) => drop());
+      messagesRef.then((drop) => drop());
     };
   }, []);
 
