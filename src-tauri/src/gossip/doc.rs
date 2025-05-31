@@ -1,23 +1,22 @@
 //! Any logic related to updating and synchronizing of the Document used for
 //! sharing state data between nodes.
 
-pub mod accessors;
+pub mod chat;
+pub mod peers;
 
-use crate::{
-    gossip::{types::ChatMessage, GossipNode},
-    utils::get_timestamp,
-};
-use iroh::{NodeId, PublicKey};
+use crate::gossip::GossipNode;
+use bytes::Bytes;
+use iroh_blobs::rpc::{client::blobs, proto as blobs_proto};
+use iroh_blobs::Hash;
+use iroh_docs::rpc::{client::docs, proto as docs_proto};
+use iroh_docs::store::Query;
+use iroh_docs::Entry;
 use iroh_docs::{
     engine::LiveEvent,
     rpc::client::docs::{Doc, ShareMode},
-    store::{Query, SortBy, SortDirection},
-    AuthorId, DocTicket, Entry, NamespaceId,
+    AuthorId, DocTicket, NamespaceId,
 };
-use n0_future::{Stream, StreamExt as _};
-
-use iroh_blobs::rpc::{client::blobs, proto as blobs_proto};
-use iroh_docs::rpc::{client::docs, proto as docs_proto};
+use n0_future::Stream;
 use quic_rpc::transport::flume::FlumeConnector;
 
 pub type BlobsRPCConnector = FlumeConnector<blobs_proto::Response, blobs_proto::Request>;
@@ -27,6 +26,12 @@ pub type DocsRPCConnector = FlumeConnector<docs_proto::Response, docs_proto::Req
 pub type BlobsClient = blobs::Client<BlobsRPCConnector>;
 
 pub type DocsClient = docs::Client<DocsRPCConnector>;
+
+// Key constants for structuring data in the iroh-doc
+pub const PEERS_PREFIX: &[u8] = b"peers/";
+pub const NICKNAME_KEY_SUFFIX: &[u8] = b"/nickname";
+pub const MESSAGES_PREFIX: &[u8] = b"messages/";
+pub const GAME_STATE_KEY: &[u8] = b"game_state";
 
 /// Shared state data synchronized between connected nodes.
 /// The doc holds all information about the current shared activity.
@@ -69,5 +74,25 @@ impl SharedActivity {
         &self,
     ) -> anyhow::Result<impl Stream<Item = anyhow::Result<LiveEvent>>> {
         self.activity.subscribe().await
+    }
+
+    /// Helper function to write to the document
+    pub(self) async fn write(
+        &self,
+        key: impl Into<Bytes>,
+        value: impl Into<Bytes>,
+    ) -> anyhow::Result<Hash> {
+        self.activity
+            .set_bytes(self.author_id, key.into(), value.into())
+            .await
+    }
+    /// Helper function to read one entry from the document
+    pub(self) async fn read_unique(&self, key: impl Into<Bytes>) -> anyhow::Result<Option<Entry>> {
+        let query = Query::key_exact(key.into());
+        self.activity.get_one(query).await
+    }
+    /// Helper function to get the content bytes associated with an entry
+    pub(self) async fn read_bytes(&self, entry: Entry) -> anyhow::Result<Bytes> {
+        self.gossip.blobs.read_to_bytes(entry.content_hash()).await
     }
 }

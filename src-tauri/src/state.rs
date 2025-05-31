@@ -1,30 +1,29 @@
 use crate::gossip::{
-    doc::SharedActivity,
-    peers::{PeerInfo, PeerMap},
-    types::ChatMessage,
-    Event, GossipNode,
+    doc::{chat::ChatMessage, peers::PeerStatus, SharedActivity},
+    spawn_event_listener, GossipNode,
 };
 use anyhow::anyhow;
-use iroh::NodeId;
-use iroh_docs::{engine::LiveEvent, DocTicket};
-use n0_future::{boxed::BoxStream, task::AbortOnDropHandle, StreamExt as _};
-use std::{collections::HashSet, sync::Arc};
-use tauri::{AppHandle, Emitter as _};
-use tokio::{
-    select,
-    sync::Mutex as TokioMutex,
-    time::{interval, Duration},
-};
+use iroh_docs::DocTicket;
+use n0_future::task::AbortOnDropHandle;
+use std::sync::Arc;
+use tauri::AppHandle;
+use tokio::sync::Mutex as TokioMutex;
 
 /// Holds information about the currently active game.
 pub struct ActiveChannel {
-    activity: SharedActivity,
+    name: String,
+    pub activity: SharedActivity,
     receiver_handle: AbortOnDropHandle<()>,
 }
 
 impl ActiveChannel {
-    pub fn new(activity: SharedActivity, receiver_handle: AbortOnDropHandle<()>) -> Self {
+    pub fn new(
+        activity: SharedActivity,
+        receiver_handle: AbortOnDropHandle<()>,
+        name: &str,
+    ) -> Self {
         Self {
+            name: name.to_string(),
             activity,
             receiver_handle,
         }
@@ -38,7 +37,6 @@ pub struct AppContext {
     pub node: GossipNode,
     active_channel: Arc<TokioMutex<Option<ActiveChannel>>>,
     pub latest_ticket: Arc<TokioMutex<Option<String>>>,
-    peers: Arc<TokioMutex<PeerMap>>,
 }
 
 impl AppContext {
@@ -48,22 +46,23 @@ impl AppContext {
             node: gossip_node,
             active_channel: Arc::new(TokioMutex::new(None)),
             latest_ticket: Arc::new(TokioMutex::new(None)),
-            peers: Arc::new(TokioMutex::new(Default::default())),
         }
     }
     /// Return a list of the known members of this Gossip Swarm.
     #[allow(unused)]
-    pub async fn get_peers(&self) -> Vec<PeerInfo> {
-        let peers = self.peers.lock().await;
-        peers.to_vec()
+    pub async fn get_peers(&self) -> Vec<String> {
+        // let peers = self.peers.lock().await;
+        // peers.to_vec()
+        todo!()
     }
     /// Send a message on the active channel.
     pub async fn send_message(&self, message: &str) -> anyhow::Result<()> {
         match self.active_channel.lock().await.as_ref() {
-            Some(channel) => channel.activity.send_message(message).await,
+            Some(channel) => channel.activity.send_message(&channel.name, message).await,
             None => Err(anyhow!("Could not send message. No active channel.")),
         }
     }
+    /// Return the full message log so far for all connected participants.
     pub async fn get_message_log(&self) -> anyhow::Result<Vec<ChatMessage>> {
         match self.active_channel.lock().await.as_ref() {
             Some(channel) => Ok(channel.activity.get_messages().await?),
@@ -102,113 +101,24 @@ impl AppContext {
         nickname: &str,
     ) -> anyhow::Result<String> {
         let activity = SharedActivity::new(doc_ticket, self.node.clone()).await?;
-        let events: BoxStream<anyhow::Result<LiveEvent>> =
-            Box::pin(activity.activity_subscribe().await?);
 
         // Spawn the event listener task
-        let receiver_handle = self.spawn_event_listener(app_handle.clone(), events);
-        let active_channel = ActiveChannel::new(activity, receiver_handle);
-        active_channel.activity.set_nickname(nickname).await?;
+        let receiver_handle = spawn_event_listener(
+            app_handle.clone(),
+            Box::pin(activity.activity_subscribe().await?),
+            self.active_channel.clone(),
+            self.latest_ticket.clone(),
+        );
+        let active_channel = ActiveChannel::new(activity, receiver_handle, nickname);
+        active_channel
+            .activity
+            .set_peer_info(nickname, PeerStatus::Online { ready: false })
+            .await?;
 
         let topic_id = active_channel.activity.id().to_string();
         // Store the active channel info
         *self.active_channel.lock().await = Some(active_channel);
         // Get the topic_id from the established channel for logging
         Ok(topic_id)
-    }
-
-    /// Spawns a background task to listen for chat events and emit them to the frontend.
-    fn spawn_event_listener(
-        &self,
-        app: tauri::AppHandle,
-        mut events: BoxStream<anyhow::Result<LiveEvent>>,
-    ) -> AbortOnDropHandle<()> {
-        let mut tick_interval = interval(Duration::from_secs(2));
-        let peers = self.peers.clone();
-        let active_channel = self.active_channel.clone();
-        let latest_ticket = self.latest_ticket.clone();
-
-        // keep track of newly 'joined' peers to look out for their first
-        // presense message.
-        let mut new_starters: HashSet<NodeId> = HashSet::new();
-
-        AbortOnDropHandle::new(n0_future::task::spawn(async move {
-            loop {
-                select! {
-                    biased; // prioritize events if both are ready
-                    event_result = events.next() => {
-                        if handle_event(event_result, &peers, &active_channel, &latest_ticket, &app, &mut new_starters).await {
-                            break; // Stop listening when the stream ends
-                        };
-                    },
-                    _ = tick_interval.tick() => peers.lock().await.update(None, &mut new_starters, &app)
-                }
-            }
-        }))
-    }
-}
-
-/// Handle the event stream, if we want to break the loop we return True.
-async fn handle_event(
-    event_result: Option<anyhow::Result<LiveEvent>>,
-    peers_clone: &Arc<TokioMutex<PeerMap>>,
-    active_channel_clone: &Arc<TokioMutex<Option<ActiveChannel>>>,
-    latest_ticket_clone: &Arc<TokioMutex<Option<String>>>,
-    app: &AppHandle,
-    new_starters: &mut HashSet<NodeId>,
-) -> bool {
-    match event_result {
-        Some(Ok(event)) => {
-            // for any event, check if we've updated the peers list (and emit peer-events)
-            peers_clone
-                .lock()
-                .await
-                .update(Some(&event), new_starters, app);
-            // emit a chat-event for each event
-            if let Err(e) = app.emit("chat-event", &event) {
-                tracing::error!("Failed to emit event to frontend: {}", e);
-            }
-            // If a peer joins or a new neighbor comes up, update the latest_ticket
-            update_ticket(&event, app, latest_ticket_clone, active_channel_clone).await;
-        }
-        Some(Err(e)) => {
-            tracing::error!("Error receiving chat event: {}", e);
-            let _ = app.emit(
-                "chat-error",
-                Event::Errorred {
-                    message: e.to_string(),
-                },
-            );
-        }
-        None => {
-            tracing::info!("Chat event stream ended.");
-            let _ = app.emit("chat-event", Event::Disconnected);
-            return true; // Stop listening when the stream ends
-        }
-    };
-    false // Continue listening
-}
-
-/// If a peer joins or a new neighbor comes up, update the latest_ticket
-/// with new peer nodes to assist reconnections.
-async fn update_ticket(
-    event: &LiveEvent,
-    app: &AppHandle,
-    latest_ticket_clone: &Arc<TokioMutex<Option<String>>>,
-    active_channel_clone: &Arc<TokioMutex<Option<ActiveChannel>>>,
-) {
-    match &event {
-        LiveEvent::NeighborUp { .. } => {
-            tracing::debug!("Peer event detected, attempting to update latest ticket.");
-            if let Some(active_channel_guard) = active_channel_clone.lock().await.as_ref() {
-                let new_ticket_str = active_channel_guard.activity.ticket();
-                *latest_ticket_clone.lock().await = Some(new_ticket_str.clone());
-                tracing::info!("Updated latest_ticket due to new peer joining/neighbor up.");
-                if let Err(e) = app.emit("ticket-updated", new_ticket_str) {
-                    tracing::warn!("Failed to emit ticket-updated event: {}", e);
-                }
-            }
-        }
-        _ => {} // Other events do not trigger ticket update
     }
 }

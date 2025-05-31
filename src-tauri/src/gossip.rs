@@ -1,13 +1,11 @@
 pub mod doc;
 mod event;
-pub mod peers;
-pub mod types;
 
 use std::{path::PathBuf, sync::Arc};
 
 use anyhow::Result;
 use doc::{BlobsClient, DocsClient};
-pub use event::Event;
+pub use event::spawn_event_listener;
 pub use iroh::NodeId;
 use iroh::{endpoint::RemoteInfo, protocol::Router, SecretKey};
 use iroh_blobs::net_protocol::Blobs;
@@ -17,8 +15,10 @@ use tracing::{info, warn};
 
 #[derive(Clone)]
 pub struct GossipNode {
+    #[allow(unused)]
     secret_key: SecretKey,
     router: Router,
+    #[allow(unused)]
     gossip: Gossip,
     blobs: BlobsClient,
     docs: DocsClient,
@@ -73,6 +73,8 @@ impl GossipNode {
             .collect::<Vec<_>>()
     }
 
+    #[allow(unused)]
+    /// Shuts down the [`Endpoint`]
     pub async fn shutdown(&self) {
         if let Err(err) = self.router.shutdown().await {
             warn!("failed to shutdown router cleanly: {err}");

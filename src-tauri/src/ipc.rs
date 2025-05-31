@@ -29,6 +29,7 @@ pub async fn create_room(
 
     // Generate ticket string from the Channel instance to be shared
     let ticket_token = state.generate_ticket().await?;
+    *state.latest_ticket.lock().await = Some(ticket_token.clone());
 
     Ok(ticket_token)
 }
