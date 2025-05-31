@@ -74,12 +74,22 @@ export async function leaveRoom(): Promise<void> {
   }
 }
 
-/** Return the node id of this node */
+/** Return the node id of this node. */
 export async function getNodeId(): Promise<string> {
   try {
     return await invoke<string>("get_node_id");
   } catch (e) {
     notifyError(`Failed to get node id: ${e}`, "NodeIdGetError");
     return "";
+  }
+}
+
+/** Return the list of messages sent be activity participants. */
+export async function getMessageLog(): Promise<string[]> {
+  try {
+    return await invoke<string[]>("get_message_log");
+  } catch (e) {
+    notifyError(`Failed to get message log: ${e}`, "MessageLogGetError");
+    return [];
   }
 }

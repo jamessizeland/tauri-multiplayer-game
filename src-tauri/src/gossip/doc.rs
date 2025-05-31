@@ -1,14 +1,20 @@
 //! Any logic related to updating and synchronizing of the Document used for
 //! sharing state data between nodes.
 
-use crate::gossip::GossipNode;
-use anyhow::Context as _;
+pub mod accessors;
+
+use crate::{
+    gossip::{types::ChatMessage, GossipNode},
+    utils::get_timestamp,
+};
+use iroh::{NodeId, PublicKey};
 use iroh_docs::{
     engine::LiveEvent,
     rpc::client::docs::{Doc, ShareMode},
-    AuthorId, DocTicket, NamespaceId,
+    store::{Query, SortBy, SortDirection},
+    AuthorId, DocTicket, Entry, NamespaceId,
 };
-use n0_future::Stream;
+use n0_future::{Stream, StreamExt as _};
 
 use iroh_blobs::rpc::{client::blobs, proto as blobs_proto};
 use iroh_docs::rpc::{client::docs, proto as docs_proto};
@@ -21,8 +27,6 @@ pub type DocsRPCConnector = FlumeConnector<docs_proto::Response, docs_proto::Req
 pub type BlobsClient = blobs::Client<BlobsRPCConnector>;
 
 pub type DocsClient = docs::Client<DocsRPCConnector>;
-
-const PUBLIC_CHAT_KEY: &str = "public-chat";
 
 /// Shared state data synchronized between connected nodes.
 /// The doc holds all information about the current shared activity.
@@ -65,15 +69,5 @@ impl SharedActivity {
         &self,
     ) -> anyhow::Result<impl Stream<Item = anyhow::Result<LiveEvent>>> {
         self.activity.subscribe().await
-    }
-    async fn insert_bytes(
-        &self,
-        key: impl AsRef<[u8]>,
-        content: bytes::Bytes,
-    ) -> anyhow::Result<()> {
-        self.activity
-            .set_bytes(self.author_id, key.as_ref().to_vec(), content)
-            .await?;
-        Ok(())
     }
 }

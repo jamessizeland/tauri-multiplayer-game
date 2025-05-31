@@ -1,12 +1,11 @@
-mod channel;
-mod doc;
+pub mod doc;
 mod event;
 pub mod peers;
+pub mod types;
 
 use std::{path::PathBuf, sync::Arc};
 
 use anyhow::Result;
-pub use doc::SharedActivity;
 use doc::{BlobsClient, DocsClient};
 pub use event::Event;
 pub use iroh::NodeId;

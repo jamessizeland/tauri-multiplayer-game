@@ -6,6 +6,7 @@ import EventLogModal from "components/elements/eventLog";
 import Messages from "components/elements/messages";
 import { notify } from "services/notifications";
 import { PeerInfo } from "types";
+import { getMessageLog } from "services/ipc";
 
 export function ChatPage() {
   const [messages, setMessages] = useState<MessageReceivedEvent[]>([]);
@@ -25,6 +26,7 @@ export function ChatPage() {
     const eventsRef = listen<ChatEvent>("chat-event", async (event) => {
       console.log(event);
       setEventLog((eventLog) => [...eventLog, event.payload]);
+      await getMessageLog();
       if (event.payload.type === "messageReceived") {
         const message = event.payload;
         setMessages((messages) => [...messages, message]);

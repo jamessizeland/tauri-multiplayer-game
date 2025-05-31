@@ -12,8 +12,6 @@ mod utils;
 
 /// Initialize the Application Context from disk.
 async fn init_context(app: tauri::AppHandle) -> tauri::Result<()> {
-    let state = app.state::<state::AppContext>();
-    *state.latest_ticket.lock().await = None;
     let data_root = app
         .path()
         .app_data_dir()
@@ -26,7 +24,10 @@ async fn init_context(app: tauri::AppHandle) -> tauri::Result<()> {
         .await
         .map_err(|e| anyhow!("Failed to spawn node: {}", e))?;
 
-    app.manage(AppContext::new(node)); // set up managed app state.
+    app.manage(AppContext::new(node));
+
+    let state = app.state::<state::AppContext>();
+    *state.latest_ticket.lock().await = None;
     state.drop_channel().await?; // Reset active channel on init.
 
     tracing::info!("Iroh node initialized.");
@@ -66,6 +67,7 @@ pub fn run() {
             ipc::get_node_id,
             ipc::set_nickname,
             ipc::get_nickname,
+            ipc::get_message_log,
         ])
         .run(tauri::generate_context!()) // Run the Tauri application
         .expect("error while running tauri application");

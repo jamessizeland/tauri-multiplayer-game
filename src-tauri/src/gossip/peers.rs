@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use iroh::NodeId;
+use iroh::{NodeId, PublicKey};
 use iroh_docs::engine::LiveEvent;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter as _};
@@ -11,6 +11,9 @@ use crate::utils::get_timestamp;
 pub struct PeerMap(HashMap<NodeId, PeerInfo>);
 
 impl PeerMap {
+    pub fn get_mut(&mut self, id: &NodeId) -> Option<&mut PeerInfo> {
+        self.0.get_mut(id)
+    }
     pub fn to_vec(&self) -> Vec<PeerInfo> {
         self.0.values().cloned().collect()
     }
@@ -18,7 +21,7 @@ impl PeerMap {
     pub fn update(
         &mut self,
         event: Option<&LiveEvent>,
-        new_starters: &mut HashSet<NodeId>,
+        new_starters: &mut HashSet<PublicKey>,
         app: &AppHandle,
     ) {
         let before = self.to_vec();

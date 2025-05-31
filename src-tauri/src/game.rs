@@ -22,7 +22,7 @@ pub enum Player {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub enum GameState {
+pub enum GamePhase {
     /// Lobby waiting to assign players ready to start game.
     New,
     /// Game is in progress
@@ -35,21 +35,24 @@ pub enum GameState {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Game {
     /// Game state
-    pub state: GameState,
+    pub state: GamePhase,
     /// Participating nodes, including spectators
     pub participants: HashSet<Player>,
+    /// Incremental version for optimistic concurrency or simple change detection
+    pub version: u64,
 }
 
 impl Game {
     /// Create a new game
     pub fn new() -> Self {
         Self {
-            state: GameState::New,
+            state: GamePhase::New,
             participants: HashSet::new(),
+            version: 0,
         }
     }
     pub fn start_game(&mut self) {
-        self.state = GameState::InProgress {
+        self.state = GamePhase::InProgress {
             turn: 0,
             board: Board::new(),
         }

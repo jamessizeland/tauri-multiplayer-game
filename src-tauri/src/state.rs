@@ -1,6 +1,8 @@
 use crate::gossip::{
+    doc::SharedActivity,
     peers::{PeerInfo, PeerMap},
-    Event, GossipNode, SharedActivity,
+    types::ChatMessage,
+    Event, GossipNode,
 };
 use anyhow::anyhow;
 use iroh::NodeId;
@@ -55,6 +57,19 @@ impl AppContext {
         let peers = self.peers.lock().await;
         peers.to_vec()
     }
+    /// Send a message on the active channel.
+    pub async fn send_message(&self, message: &str) -> anyhow::Result<()> {
+        match self.active_channel.lock().await.as_ref() {
+            Some(channel) => channel.activity.send_message(message).await,
+            None => Err(anyhow!("Could not send message. No active channel.")),
+        }
+    }
+    pub async fn get_message_log(&self) -> anyhow::Result<Vec<ChatMessage>> {
+        match self.active_channel.lock().await.as_ref() {
+            Some(channel) => Ok(channel.activity.get_messages().await?),
+            None => Err(anyhow!("Could not get message log. No active channel.")),
+        }
+    }
     /// Return the active channel's id.
     pub async fn get_topic_id(&self) -> anyhow::Result<String> {
         match self.active_channel.lock().await.as_ref() {
@@ -93,6 +108,7 @@ impl AppContext {
         // Spawn the event listener task
         let receiver_handle = self.spawn_event_listener(app_handle.clone(), events);
         let active_channel = ActiveChannel::new(activity, receiver_handle);
+        active_channel.activity.set_nickname(nickname).await?;
 
         let topic_id = active_channel.activity.id().to_string();
         // Store the active channel info
@@ -119,16 +135,13 @@ impl AppContext {
         AbortOnDropHandle::new(n0_future::task::spawn(async move {
             loop {
                 select! {
-                    biased; // Optional: prioritize receiver events if both are ready
-                    event_result = events.next() => { // `receiver` is moved into the task
+                    biased; // prioritize events if both are ready
+                    event_result = events.next() => {
                         if handle_event(event_result, &peers, &active_channel, &latest_ticket, &app, &mut new_starters).await {
                             break; // Stop listening when the stream ends
                         };
                     },
-                    _ = tick_interval.tick() => {
-                        // This branch runs every second
-                        peers.lock().await.update(None, &mut new_starters, &app);
-                    },
+                    _ = tick_interval.tick() => peers.lock().await.update(None, &mut new_starters, &app)
                 }
             }
         }))

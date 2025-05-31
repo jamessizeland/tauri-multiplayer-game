@@ -3,6 +3,7 @@ use std::str::FromStr;
 use crate::{gossip::NodeId, state::AppContext, utils::AppStore};
 use anyhow::anyhow;
 use iroh_docs::DocTicket;
+use tracing::info;
 
 #[tauri::command]
 /// Create a new room and return the information required to send
@@ -66,9 +67,7 @@ pub async fn send_message(
     message: String,
     state: tauri::State<'_, AppContext>,
 ) -> tauri::Result<()> {
-    let sender = state.get_sender().await?;
-    sender.send(message).await?;
-    Ok(())
+    Ok(state.send_message(&message).await?)
 }
 
 #[tauri::command]
@@ -110,4 +109,12 @@ pub async fn leave_room(
 /// Returns the node id of this node
 pub async fn get_node_id(state: tauri::State<'_, AppContext>) -> tauri::Result<NodeId> {
     Ok(state.node.node_id())
+}
+
+#[tauri::command]
+/// Read Message Log
+pub async fn get_message_log(state: tauri::State<'_, AppContext>) -> tauri::Result<Vec<String>> {
+    let msgs = state.get_message_log().await?;
+    info!("message log: {:?}", msgs);
+    Ok(Vec::new())
 }
