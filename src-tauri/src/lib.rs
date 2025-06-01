@@ -2,30 +2,32 @@ use anyhow::anyhow;
 use tauri::Manager as _;
 use utils::AppStore;
 
-mod chat;
+use crate::state::AppContext;
+
 mod game;
+mod gossip;
 mod ipc;
 mod state;
 mod utils;
 
 /// Initialize the Application Context from disk.
 async fn init_context(app: tauri::AppHandle) -> tauri::Result<()> {
-    let state = app.state::<state::AppContext>();
-    let mut node_guard = state.node.lock().await;
-    if node_guard.is_some() {
-        tracing::info!("Iroh node already initialized. Skipping re-initialization.");
-        return Ok(());
-    }
-    *state.latest_ticket.lock().await = None;
+    let data_root = app
+        .path()
+        .app_data_dir()
+        .map_err(|_| anyhow!("can't get application data directory"))?
+        .join("iroh_data");
 
     // Spawn the Iroh node
     let key = AppStore::acquire(&app)?.get_secret_key()?;
-    let node = chat::ChatNode::spawn(Some(key))
+    let node = gossip::GossipNode::spawn(Some(key), data_root)
         .await
         .map_err(|e| anyhow!("Failed to spawn node: {}", e))?;
 
-    *node_guard = Some(node); // Store the newly spawned node
-    state.drop_channel().await?; // Reset active channel on init
+    app.manage(AppContext::new(node));
+
+    let state = app.state::<state::AppContext>();
+    state.drop_channel().await?; // Reset active channel on init.
 
     tracing::info!("Iroh node initialized.");
     Ok(())
@@ -45,7 +47,6 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
-        .manage(state::AppContext::new()) // Register the state with Tauri
         .setup(|app| {
             #[cfg(debug_assertions)] // only include this code on debug builds
             app.get_webview_window("main").unwrap().open_devtools();
@@ -65,6 +66,8 @@ pub fn run() {
             ipc::get_node_id,
             ipc::set_nickname,
             ipc::get_nickname,
+            ipc::get_message_log,
+            ipc::get_peers,
         ])
         .run(tauri::generate_context!()) // Run the Tauri application
         .expect("error while running tauri application");

@@ -1,27 +1,15 @@
-export type ChannelInfo = {
-  id: string;
-  name: string;
-};
-
-export type TicketOpts = {
-  includeMyself: boolean;
-  includeBootstrap: boolean;
-  includeNeighbors: boolean;
-};
-
-export interface Message {
-  id: string;
+export interface ChatMessage {
   sender: string;
   content: string;
-  nickname?: string;
+  nickname: string;
+  timestamp: number;
 }
 
 export interface PeerInfo {
   id: string;
   nickname: string;
   status: PeerStatus;
-  lastSeen: number;
-  role: "Myself" | "RemoteNode";
+  ready: boolean;
 }
 
-export type PeerStatus = "Online" | "Away" | "Offline";
+export type PeerStatus = "Online" | "Offline" | "Unknown";

@@ -104,40 +104,31 @@ const RenderEvent: React.FC<{ event: ChatEvent }> = ({ event }) => {
   );
 
   switch (event.type) {
-    case "presence":
+    case "syncFinished":
+      return <Card title="Sync Finished"></Card>;
+    case "contentReady":
+      return <Card title="Content Ready"></Card>;
+    case "pendingContentReady":
+      return <Card title="Pending Content Ready"></Card>;
+    case "disconnected":
+      return <Card title="Disconnected"></Card>;
+    case "peerUpdate":
       return (
-        <Card title="Presence Update">
-          <Property label="From">{event.from}</Property>
-          <Property label="Nickname">{event.nickname}</Property>
-          <Property label="Timestamp">
-            {new Date(event.sentTimestamp / 1000).toLocaleString()}
-          </Property>
+        <Card title="Peer Info Updated">
+          <Property label="Node ID">{event.info.id}</Property>
+          <Property label="Nickname">{event.info.nickname}</Property>
+          <Property label="Status">{event.info.status}</Property>
+          <Property label="Ready">{event.info.ready}</Property>
         </Card>
       );
-    case "messageReceived":
+    case "newMessage":
       return (
         <Card title="Message Received">
-          <Property label="From">{event.from}</Property>
-          <Property label="Nickname">{event.nickname}</Property>
-          <Property label="Message">{event.text}</Property>
+          <Property label="From">{event.message.sender}</Property>
+          <Property label="Nickname">{event.message.nickname}</Property>
+          <Property label="Message">{event.message.content}</Property>
           <Property label="Timestamp">
-            {new Date(event.sentTimestamp / 1000).toLocaleString()}
-          </Property>
-        </Card>
-      );
-    case "joined":
-      return (
-        <Card title="Joined Room">
-          <Property label="Neighbors">
-            {event.neighbors.length > 0 ? (
-              <ul className="list-disc list-inside ml-2">
-                {event.neighbors.map((n, i) => (
-                  <li key={i}>{n}</li>
-                ))}
-              </ul>
-            ) : (
-              "None"
-            )}
+            {new Date(event.message.timestamp / 1000).toLocaleString()}
           </Property>
         </Card>
       );
@@ -151,14 +142,6 @@ const RenderEvent: React.FC<{ event: ChatEvent }> = ({ event }) => {
       return (
         <Card title="Neighbor Disconnected">
           <Property label="Node ID">{event.nodeId}</Property>
-        </Card>
-      );
-    case "lagged":
-      return (
-        <Card title="Lagged">
-          <p className="text-xs opacity-80">
-            The connection may have experienced a lag.
-          </p>
         </Card>
       );
     case "errored":

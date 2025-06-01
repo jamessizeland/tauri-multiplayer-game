@@ -1,9 +1,15 @@
+use std::str::FromStr;
+
 use crate::{
-    chat::{channel::TicketOpts, ChatTicket, NodeId},
+    gossip::{
+        doc::{chat::ChatMessage, peers::PeerInfo},
+        NodeId,
+    },
     state::AppContext,
     utils::AppStore,
 };
 use anyhow::anyhow;
+use iroh_docs::DocTicket;
 
 #[tauri::command]
 /// Create a new room and return the information required to send
@@ -13,33 +19,14 @@ pub async fn create_room(
     state: tauri::State<'_, AppContext>,
     app: tauri::AppHandle,
 ) -> tauri::Result<String> {
-    let node_guard = state.node.lock().await;
-    let Some(node) = node_guard.as_ref() else {
-        return Err(anyhow!("Node not initialized").into());
-    };
-
     // Leave any existing room first
     leave_room(state.clone(), app.clone()).await?;
 
     let store = AppStore::acquire(&app)?;
-    // Create a new random ticket to initialize the channel.
-    // generate_channel will ensure this node is part of the bootstrap.
-    let initial_ticket = ChatTicket::new_random();
-
-    // Use generate_channel from [chat::channel]
-    let mut channel = node
-        .generate_channel(initial_ticket, nickname.clone())
-        .map_err(|e| anyhow!("Failed to generate channel: {}", e))?;
-
-    // Take the receiver from the Channel object to give to spawn_event_listener
-    let rx = channel
-        .take_receiver()
-        .ok_or_else(|| anyhow!("Receiver already taken from channel object"))?;
-
     store.set_nickname(&nickname)?;
 
     // Store the active channel info
-    state.start_channel(channel, &app, rx, &nickname).await?;
+    state.start_channel(None, &app, &nickname).await?;
 
     // Get the topic_id from the established channel for logging
     let topic_id_str = state.get_topic_id().await?;
@@ -47,9 +34,8 @@ pub async fn create_room(
     tracing::info!("Created and joined room: {}", topic_id_str);
 
     // Generate ticket string from the Channel instance to be shared
-    let ticket_token = state.generate_ticket(TicketOpts::all()).await?;
+    let ticket_token = state.generate_ticket().await?;
 
-    *state.latest_ticket.lock().await = Some(ticket_token.clone());
     Ok(ticket_token)
 }
 
@@ -61,30 +47,13 @@ pub async fn join_room(
     state: tauri::State<'_, AppContext>,
     app: tauri::AppHandle,
 ) -> tauri::Result<()> {
-    let node_guard = state.node.lock().await;
-    let Some(node) = node_guard.as_ref() else {
-        return Err(anyhow!("Node not initialized").into());
-    };
-
     // Leave any existing room first
     leave_room(state.clone(), app.clone()).await?;
 
-    tracing::info!("deserializing ticket token: {}", ticket);
-    let chat_ticket = ChatTicket::deserialize(&ticket)?;
-    *state.latest_ticket.lock().await = Some(ticket.clone());
-
-    // Use generate_channel from chat::channel
-    let mut channel = node
-        .generate_channel(chat_ticket.clone(), nickname.clone())
-        .map_err(|e| anyhow!("Failed to generate channel: {}", e))?;
-
-    // Take the receiver from the Channel object
-    let rx = channel
-        .take_receiver()
-        .ok_or_else(|| anyhow!("Receiver already taken from channel object"))?;
-
+    let ticket =
+        DocTicket::from_str(&ticket).map_err(|e| anyhow!("Invalid activity ticket: {}", e))?;
     // Store the active channel info
-    state.start_channel(channel, &app, rx, &nickname).await?;
+    state.start_channel(Some(ticket), &app, &nickname).await?;
 
     // Get the topic_id from the established channel for logging
     let topic_id_str = state.get_topic_id().await?;
@@ -103,11 +72,8 @@ pub async fn join_room(
 pub async fn send_message(
     message: String,
     state: tauri::State<'_, AppContext>,
-    _app: tauri::AppHandle, // Marked as unused, can be removed if not needed by Tauri
 ) -> tauri::Result<()> {
-    let sender = state.get_sender().await?;
-    sender.send(message).await?;
-    Ok(())
+    Ok(state.send_message(&message).await?)
 }
 
 #[tauri::command]
@@ -129,8 +95,8 @@ pub async fn get_nickname(app: tauri::AppHandle) -> tauri::Result<Option<String>
 pub async fn get_latest_ticket(
     state: tauri::State<'_, AppContext>,
 ) -> tauri::Result<Option<String>> {
-    let ticket_guard = state.latest_ticket.lock().await;
-    Ok(ticket_guard.clone())
+    let ticket = state.generate_ticket().await.ok();
+    Ok(ticket)
 }
 
 #[tauri::command]
@@ -148,8 +114,23 @@ pub async fn leave_room(
 #[tauri::command]
 /// Returns the node id of this node
 pub async fn get_node_id(state: tauri::State<'_, AppContext>) -> tauri::Result<NodeId> {
-    let node = state.node.lock().await;
-    node.as_ref()
-        .map(|chat_node| chat_node.node_id())
-        .ok_or(anyhow!("Node not initialized").into())
+    Ok(state.node.node_id())
+}
+
+#[tauri::command]
+/// Read Message Log
+pub async fn get_message_log(
+    state: tauri::State<'_, AppContext>,
+) -> tauri::Result<Vec<ChatMessage>> {
+    let msgs = state.get_message_log().await?;
+    tracing::info!("message log: {:?}", msgs);
+    Ok(msgs)
+}
+
+#[tauri::command]
+/// Get the peers list
+pub async fn get_peers(state: tauri::State<'_, AppContext>) -> tauri::Result<Vec<PeerInfo>> {
+    let peers = state.get_peers().await?;
+    tracing::info!("peers: {:?}", peers);
+    Ok(peers)
 }

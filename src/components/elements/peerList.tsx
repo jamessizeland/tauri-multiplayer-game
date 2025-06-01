@@ -5,7 +5,6 @@ const PeerInfoDropdown: React.FC<{ peers: PeerInfo[] }> = ({ peers }) => {
   const online = useCallback(() => {
     return peers.filter((p) => p.status === "Online");
   }, [peers]);
-
   return (
     <div className="dropdown dropdown-center">
       <div tabIndex={0} role="button" className="btn btn-accent">
@@ -18,8 +17,7 @@ const PeerInfoDropdown: React.FC<{ peers: PeerInfo[] }> = ({ peers }) => {
         {peers.map((peer) => (
           <li key={peer.id} className="flex items-center flex-row">
             <PeerActivityStatus status={peer.status} />
-            {peer.nickname} -{" "}
-            {new Date(peer.lastSeen / 1000).toLocaleTimeString()}
+            {peer.nickname}
           </li>
         ))}
       </ul>
@@ -37,7 +35,7 @@ const PeerActivityStatus: React.FC<{ status: PeerStatus }> = ({ status }) => {
       return (
         <span className="status mr-2" style={{ backgroundColor: "red" }} />
       );
-    case "Away":
+    case "Unknown":
       return (
         <span className="status mr-2" style={{ backgroundColor: "yellow" }} />
       );
