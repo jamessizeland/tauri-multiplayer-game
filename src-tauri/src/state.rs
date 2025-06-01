@@ -40,6 +40,7 @@ pub struct AppContext {
     // The iroh client instance used for all interactions.
     pub node: GossipNode,
     active_channel: Arc<TokioMutex<Option<ActiveChannel>>>,
+    pub latest_ticket: TokioMutex<Option<String>>,
 }
 
 impl AppContext {
@@ -48,6 +49,7 @@ impl AppContext {
         Self {
             node: gossip_node,
             active_channel: Arc::new(TokioMutex::new(None)),
+            latest_ticket: TokioMutex::new(None),
         }
     }
     /// Return a list of the known members of this Gossip Swarm.
@@ -78,15 +80,24 @@ impl AppContext {
             None => Err(anyhow!("Could not get topic ID. No active channel.")),
         }
     }
-    /// Generate a new ticket token string.
+    /// Generate a new ticket token string or use the existing one.
     pub async fn generate_ticket(&self) -> anyhow::Result<String> {
+        let mut latest_ticket = self.latest_ticket.lock().await;
         match self.active_channel.lock().await.as_ref() {
-            Some(channel) => Ok(channel.activity.ticket().await?),
-            None => Err(anyhow!("Could not generate ticket. No active channel.")),
+            Some(channel) => {
+                let ticket = channel.activity.ticket().await?;
+                *latest_ticket = Some(ticket.clone());
+                Ok(ticket)
+            }
+            None => match latest_ticket.clone() {
+                Some(ticket) => Ok(ticket),
+                None => Err(anyhow!("Could not generate ticket. No active channel.")),
+            },
         }
     }
     /// Close our connection to this room.  Returns deactivated topic ID.
     pub async fn drop_channel(&self) -> anyhow::Result<Option<String>> {
+        self.generate_ticket().await.ok(); // try to generate a new ticket
         match self.active_channel.lock().await.take() {
             Some(channel) => {
                 channel.activity.set_status(PeerStatus::Offline).await?;
@@ -114,12 +125,17 @@ impl AppContext {
             self.active_channel.clone(),
         );
         let active_channel = ActiveChannel::new(activity, receiver_handle, nickname);
+
         active_channel.activity.set_nickname(nickname).await?;
+        active_channel
+            .activity
+            .set_status(PeerStatus::Online)
+            .await?;
 
         let topic_id = active_channel.activity.id().to_string();
         // Store the active channel info
         *self.active_channel.lock().await = Some(active_channel);
-        // Get the topic_id from the established channel for logging
+
         Ok(topic_id)
     }
 }

@@ -5,7 +5,6 @@ import TopBar from "components/elements/topbar";
 import EventLogModal from "components/elements/eventLog";
 import Messages from "components/elements/messages";
 import { ChatMessage, PeerInfo } from "types";
-import { notify } from "services/notifications";
 import { getMessageLog, getNodeId, getPeers } from "services/ipc";
 
 export function ChatPage() {
@@ -19,6 +18,18 @@ export function ChatPage() {
   useEffect(() => {
     getNodeId().then((id) => {
       setMyNodeId(id);
+      getMessageLog().then((messages) => {
+        setMessages(messages);
+      });
+      getPeers().then((peers) => {
+        const newNeighbours = new Map();
+        peers.forEach((peer) => {
+          if (peer.id !== id) {
+            newNeighbours.set(peer.id, peer);
+          }
+        });
+        setNeighbours(newNeighbours);
+      });
     });
   }, []);
 
@@ -26,36 +37,49 @@ export function ChatPage() {
     const eventsRef = listen<ChatEvent>("chat-event", async (event) => {
       setEventLog((eventLog) => [...eventLog, event.payload]);
       console.log(event);
-      if (event.payload.type === "newMessage") {
-        const message = event.payload.message;
-        setMessages((messages) => [...messages, message]);
-      } else if (event.payload.type === "peerUpdate") {
-        const peer = event.payload.info;
-        setNeighbours((neighbours) => {
-          if (peer.id !== myNodeId && !neighbours.has(peer.id)) {
-            notify(`New peer joined ${peer.nickname}`);
-          }
-          const newNeighbours = new Map(neighbours); // react needs us to make a new object here
-          newNeighbours.set(peer.id, peer);
-          return newNeighbours;
-        });
-      } else if (event.payload.type === "syncFinished") {
-        getMessageLog().then((messages) => {
-          setMessages(messages);
-        });
-        getPeers().then((peers) => {
-          const newNeighbours = new Map();
-          peers.forEach((peer) => {
+      // any time anything changes, update all data.
+      getMessageLog().then((messages) => {
+        setMessages(messages);
+      });
+      getPeers().then((peers) => {
+        const newNeighbours = new Map();
+        peers.forEach((peer) => {
+          if (peer.id !== myNodeId) {
             newNeighbours.set(peer.id, peer);
-          });
-          setNeighbours(newNeighbours);
+          }
         });
-      }
+        setNeighbours(newNeighbours);
+      });
+      // if (event.payload.type === "newMessage") {
+      //   const message = event.payload.message;
+      //   setMessages((messages) => [...messages, message]);
+      // } else if (event.payload.type === "peerUpdate") {
+      //   const peer = event.payload.info;
+      //   setNeighbours((neighbours) => {
+      //     if (peer.id === myNodeId) return neighbours;
+      //     if (!neighbours.has(peer.id)) {
+      //       notify(`New peer joined ${peer.nickname}`);
+      //     }
+      //     const newNeighbours = new Map(neighbours); // react needs us to make a new object here
+      //     newNeighbours.set(peer.id, peer);
+      //     return newNeighbours;
+      //   });
+      // } else if (event.payload.type === "contentReady") {
+      //   getMessageLog().then((messages) => {
+      //     setMessages(messages);
+      //   });
+      //   getPeers().then((peers) => {
+      //     const newNeighbours = new Map();
+      //     peers.forEach((peer) => {
+      //       if (peer.id === myNodeId) return;
+      //       newNeighbours.set(peer.id, peer);
+      //     });
+      //     setNeighbours(newNeighbours);
+      //   });
+      // }
     });
     return () => {
-      // updatePeersRef.then((drop) => drop());
       eventsRef.then((drop) => drop());
-      // messagesRef.then((drop) => drop());
     };
   }, []);
 

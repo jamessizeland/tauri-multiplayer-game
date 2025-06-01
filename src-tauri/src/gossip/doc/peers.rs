@@ -19,7 +19,7 @@ pub enum PeerStatus {
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct PeerInfo {
-    pub node_id: iroh::NodeId,
+    pub id: iroh::NodeId,
     pub nickname: String,
     pub status: PeerStatus,
     pub ready: bool,
@@ -33,7 +33,7 @@ impl SharedActivity {
         let key = peer_nickname_key(&node_id);
         let peer_info = match self.get_peer_info(&node_id).await? {
             None => PeerInfo {
-                node_id: self.gossip.node_id(),
+                id: self.gossip.node_id(),
                 nickname: nickname.to_string(),
                 status: PeerStatus::Online,
                 ready: false,

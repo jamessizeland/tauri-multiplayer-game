@@ -1,14 +1,9 @@
-use bytes::Bytes;
 use iroh::NodeId;
 use iroh_blobs::Hash;
-use iroh_docs::{engine::LiveEvent, ContentStatus, Entry, RecordIdentifier};
+use iroh_docs::{engine::LiveEvent, ContentStatus};
 use n0_future::{boxed::BoxStream, task::AbortOnDropHandle, StreamExt as _};
 use serde::Serialize;
-use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
-    time::Duration,
-};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 use tauri::{AppHandle, Emitter as _};
 use tokio::{sync::Mutex as TokioMutex, time::sleep};
 use tracing::{debug, error, info};
@@ -125,8 +120,18 @@ pub fn spawn_event_listener(
                         }
                     }
                 }
+                LiveEvent::ContentReady { hash } => {
+                    info!("Content ready for hash: {:?}.", hash);
+                    app.emit("chat-event", Event::ContentReady).ok();
+                    if let Some(key) = pending_entries.remove(hash) {
+                        process_entry_for_updates(&key, *hash, channel, &app).await;
+                    } else {
+                        // This might happen if ContentReady is for content that wasn't tracked as pending
+                        // (e.g., it was already complete, or it's a blob not directly tied to a doc entry key we track).
+                        debug!("ContentReady for hash {:?} but no matching key found in pending_entries. It might have been processed already or is not a tracked document entry.", hash);
+                    }
+                }
                 LiveEvent::SyncFinished(_sync_event) => {
-                    info!("Sync finished, frontend should request all data.");
                     app.emit("chat-event", Event::SyncFinished).ok();
                 }
                 LiveEvent::NeighborUp(node_id) => {
@@ -138,13 +143,6 @@ pub fn spawn_event_listener(
                     info!("Neighbor down: {}", node_id);
                     let payload = Event::NeighborDown { node_id: *node_id };
                     app.emit("chat-event", &payload).ok();
-                }
-                LiveEvent::ContentReady { hash } => {
-                    info!("Content ready for hash: {:?}.", hash);
-                    app.emit("chat-event", Event::ContentReady).ok();
-                    if let Some(key) = pending_entries.remove(hash) {
-                        process_entry_for_updates(&key, *hash, channel, &app).await;
-                    }
                 }
                 LiveEvent::PendingContentReady => {
                     info!("Pending content ready event received. System is fetching data.");
