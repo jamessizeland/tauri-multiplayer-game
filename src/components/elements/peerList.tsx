@@ -19,7 +19,6 @@ const PeerInfoDropdown: React.FC<{ peers: PeerInfo[] }> = ({ peers }) => {
           <li key={peer.id} className="flex items-center flex-row">
             <PeerActivityStatus status={peer.status} />
             {peer.nickname} -{" "}
-            {new Date(peer.lastSeen / 1000).toLocaleTimeString()}
           </li>
         ))}
       </ul>
@@ -37,7 +36,7 @@ const PeerActivityStatus: React.FC<{ status: PeerStatus }> = ({ status }) => {
       return (
         <span className="status mr-2" style={{ backgroundColor: "red" }} />
       );
-    case "Away":
+    case "Unknown":
       return (
         <span className="status mr-2" style={{ backgroundColor: "yellow" }} />
       );

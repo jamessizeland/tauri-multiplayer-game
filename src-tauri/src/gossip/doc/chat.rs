@@ -53,7 +53,7 @@ impl SharedActivity {
         let mut messages: Vec<ChatMessage> = Vec::new();
 
         while let Some(Ok(entry)) = entries.next().await {
-            let bytes = self.read_bytes(entry).await?;
+            let bytes = self.read_bytes(entry.content_hash()).await?;
             let message: ChatMessage = postcard::from_bytes(&bytes)?;
             messages.push(message);
         }

@@ -1,7 +1,10 @@
 use std::str::FromStr;
 
 use crate::{
-    gossip::{doc::chat::ChatMessage, NodeId},
+    gossip::{
+        doc::{chat::ChatMessage, peers::PeerInfo},
+        NodeId,
+    },
     state::AppContext,
     utils::AppStore,
 };
@@ -32,7 +35,6 @@ pub async fn create_room(
 
     // Generate ticket string from the Channel instance to be shared
     let ticket_token = state.generate_ticket().await?;
-    *state.latest_ticket.lock().await = Some(ticket_token.clone());
 
     Ok(ticket_token)
 }
@@ -93,8 +95,8 @@ pub async fn get_nickname(app: tauri::AppHandle) -> tauri::Result<Option<String>
 pub async fn get_latest_ticket(
     state: tauri::State<'_, AppContext>,
 ) -> tauri::Result<Option<String>> {
-    let ticket_guard = state.latest_ticket.lock().await;
-    Ok(ticket_guard.clone())
+    let ticket = state.generate_ticket().await.ok();
+    Ok(ticket)
 }
 
 #[tauri::command]
@@ -123,4 +125,12 @@ pub async fn get_message_log(
     let msgs = state.get_message_log().await?;
     tracing::info!("message log: {:?}", msgs);
     Ok(msgs)
+}
+
+#[tauri::command]
+/// Get the peers list
+pub async fn get_peers(state: tauri::State<'_, AppContext>) -> tauri::Result<Vec<PeerInfo>> {
+    let peers = state.get_peers().await?;
+    tracing::info!("peers: {:?}", peers);
+    Ok(peers)
 }

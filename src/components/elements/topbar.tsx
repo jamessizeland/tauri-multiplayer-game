@@ -6,7 +6,7 @@ import { CiLogout, CiMemoPad } from "react-icons/ci";
 
 const TopBar: React.FC<{
   openEventLog: () => void;
-  neighbours: PeerInfo[];
+  neighbours: Map<string, PeerInfo>;
 }> = ({ openEventLog, neighbours }) => {
   return (
     <div className="w-screen flex justify-between p-1">
@@ -21,7 +21,7 @@ const TopBar: React.FC<{
         <CiLogout />
       </button>
       <div className="flex flex-row space-x-2">
-        <PeerInfoDropdown peers={neighbours} />
+        <PeerInfoDropdown peers={Array.from(neighbours.values())} />
         <TicketViewer />
       </div>
       <button

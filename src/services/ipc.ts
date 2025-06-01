@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { notifyError } from "./notifications";
-import { ChatMessage } from "types";
+import { ChatMessage, PeerInfo } from "types";
 
 /** Create a new room and return the information required to send
  an out-of-band Join Code to others to connect. */
@@ -91,6 +91,16 @@ export async function getMessageLog(): Promise<ChatMessage[]> {
     return await invoke<ChatMessage[]>("get_message_log");
   } catch (e) {
     notifyError(`Failed to get message log: ${e}`, "MessageLogGetError");
+    return [];
+  }
+}
+
+/** Return the list of peers connected to this node. */
+export async function getPeers(): Promise<PeerInfo[]> {
+  try {
+    return await invoke<PeerInfo[]>("get_peers");
+  } catch (e) {
+    notifyError(`Failed to get peers: ${e}`, "PeersGetError");
     return [];
   }
 }

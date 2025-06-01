@@ -64,7 +64,7 @@ impl SharedActivity {
         match self.read_unique(key).await? {
             None => Ok(None),
             Some(entry) => {
-                let bytes = self.read_bytes(entry).await?;
+                let bytes = self.read_bytes(entry.content_hash()).await?;
                 Ok(Some(postcard::from_bytes(&bytes)?))
             }
         }
@@ -75,7 +75,7 @@ impl SharedActivity {
         let mut entries = self.activity.get_many(query).await?;
         let mut peers = Vec::new();
         while let Some(Ok(entry)) = entries.next().await {
-            let bytes = self.read_bytes(entry).await?;
+            let bytes = self.read_bytes(entry.content_hash()).await?;
             let peer_info: PeerInfo = postcard::from_bytes(&bytes)?;
             peers.push(peer_info);
         }

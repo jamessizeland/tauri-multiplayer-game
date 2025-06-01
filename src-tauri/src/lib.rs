@@ -27,7 +27,6 @@ async fn init_context(app: tauri::AppHandle) -> tauri::Result<()> {
     app.manage(AppContext::new(node));
 
     let state = app.state::<state::AppContext>();
-    *state.latest_ticket.lock().await = None;
     state.drop_channel().await?; // Reset active channel on init.
 
     tracing::info!("Iroh node initialized.");
@@ -68,6 +67,7 @@ pub fn run() {
             ipc::set_nickname,
             ipc::get_nickname,
             ipc::get_message_log,
+            ipc::get_peers,
         ])
         .run(tauri::generate_context!()) // Run the Tauri application
         .expect("error while running tauri application");

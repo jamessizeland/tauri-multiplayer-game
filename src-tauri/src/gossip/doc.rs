@@ -107,7 +107,7 @@ impl SharedActivity {
         self.activity.get_one(query).await
     }
     /// Helper function to get the content bytes associated with an entry
-    pub async fn read_bytes(&self, entry: Entry) -> anyhow::Result<Bytes> {
-        self.gossip.blobs.read_to_bytes(entry.content_hash()).await
+    pub async fn read_bytes(&self, hash: Hash) -> anyhow::Result<Bytes> {
+        self.gossip.blobs.read_to_bytes(hash).await
     }
 }

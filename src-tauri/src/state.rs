@@ -40,7 +40,6 @@ pub struct AppContext {
     // The iroh client instance used for all interactions.
     pub node: GossipNode,
     active_channel: Arc<TokioMutex<Option<ActiveChannel>>>,
-    pub latest_ticket: Arc<TokioMutex<Option<String>>>,
 }
 
 impl AppContext {
@@ -49,7 +48,6 @@ impl AppContext {
         Self {
             node: gossip_node,
             active_channel: Arc::new(TokioMutex::new(None)),
-            latest_ticket: Arc::new(TokioMutex::new(None)),
         }
     }
     /// Return a list of the known members of this Gossip Swarm.
